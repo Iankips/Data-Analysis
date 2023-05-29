@@ -1,0 +1,200 @@
+---
+title: "Travel Data Analysis"
+output:
+  html_document: default
+  pdf_document: default
+date: "2023-05-20"
+---
+
+```{r setup, include=FALSE, message=FALSE, warnings=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warnings=FALSE)
+```
+
+## R Markdown
+# Business Understanding.
+In this case, the given data deals with travel data of passengers, I would like to focus on the premium. My objective is to understand how does the premium amount differ in view of the different set of variables. What i mean is, what factors affects the premium amount and what does it mean for the business. To understand what circumstances would result to higher premium. 
+
+# Data understanding.
+This part entails data cleaning and ensuring that the data is ready for exploration. This part also comes with some Exploratory Data Analysis I have done just to understand the data better, formulate questions or draw new insights.
+## Travel data.
+```{r, importing data, echo=FALSE}
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+
+Travel <- read.csv('C:/Users/i.kiprotich/Documents/Markdown/data.csv')
+head(Travel, 15)
+
+```
+From the head of the dataset, I can already see data type mismatch. For example, the Departure column is supposed to be of type Date, however it a character. This means I have correct the data types before proceeding.
+
+## Summary of the data.
+```{r, Summary, echo=FALSE}
+summary(Travel)
+```
+I used summary(), its a function that gives me the summary of the entire dataframe. From the summary I can see all columns and their respective data types. From this I can deduce which columns to handle in terms of data type. Below is where I do the conversion. 
+## Data type conversion.
+```{r, Data type conversion, echo=FALSE}
+#Converting the dates.
+#1. Departure.
+Travel$DEPARTURE <- as.Date(Travel$DEPARTURE)
+
+#2. Return Date.
+Travel$RETURN.DATE = as.Date(Travel$RETURN.DATE)
+
+#3. Date posted.
+Travel$DATE.POSTED <- as.Date(Travel$DATE.POSTED)
+
+#Checking.
+head(Travel, 5)
+```
+Now that conversions have been made, its time to check for missing values.
+## Checking for null values.
+```{r, null values,echo=FALSE}
+is.null(Travel)
+```
+I decided to split the Origin into two, the county itself and the location the passenger was visiting. This helps in the case where i may need to analyse travel habits of the passengers and use the information to provide data driven answers.
+## Separating the origin and destination columns.
+```{r, separating the columns, echo=FALSE, warning=FALSE}
+Travel_separate <- Travel %>% separate(ORIGIN, into = c('OriginCounty', 'OriginLocation'), sep = ",") %>%
+  separate(DESTINATION, into = c('DestinationCounty', 'DestinationLocation'), sep = ",")
+
+head(Travel_separate, 5)
+```
+## Checking branches involved.
+Looking at the branch column, i want to know just how many branches are captured here in the data. I would also check on their respective engagement with clients/passengers. So they are arranged in a descending order, from the one with the highest frequncy to the lowest.
+```{r,Branches, echo=FALSE}
+br_anch <- Travel %>% group_by(BRANCH) %>% count() %>% arrange(desc(n))
+br_anch
+```
+From the above information, there are some branches that appear twice such as Ciata and other branches have been misspell that would be Westagate. It would be wise to correct that before proceeding.
+
+## Combining same branches to one.
+```{r, branches,echo=FALSE}
+Travel_separate <- Travel_separate %>% mutate(BRANCH = gsub('Westagate', 'Westgate', str_trim(BRANCH)))
+Travel_separate <- Travel_separate %>% mutate(BRANCH = gsub('Ciata', 'Ciata', str_trim(BRANCH)))
+
+branch <- Travel_separate %>% group_by(BRANCH) %>% count()
+branch
+```
+# EDA.
+## Premium Distribution.
+Using a histogram would give a general view of the distribution of the premium. From the plot, its clear that there is a skew. Its a positive skew as the tail is on the right.
+```{r, histogram, echo=FALSE}
+ggplot(data = Travel_separate, aes(x = PREMIUM))+
+  geom_histogram(binwidth = 50)+
+  labs(title = 'Premium Distribution.')
+```
+## Premium in relation to passengers.
+This gives the trend of how the premium varies with passengers. The hypothesis here is the more the passengers the more the premium, added a third factor, colored by branch. However, the results are abit different. There are a couple outliers that are suggesting something different. Could there be other factors involved that is cause the trend observed?
+```{r, point plot, echo=FALSE}
+ggplot(data = Travel_separate) +
+  geom_point(mapping = aes(x = PREMIUM, y = PASSENGERS, color = BRANCH)) +
+  labs(title = "Relationship between Premium and Passengers.")
+```
+In an attempt to try and answer the above question, I decide to dig deeper into the individual branches and observe the the premium trend under the same set of variables. Interestingly, there were branches that depicted the exact same trend as observed above. There could be other factors that controls the trend observed.
+
+## Investigating the trend.
+```{r, trend,echo=FALSE}
+ggplot(data = Travel_separate)+
+  geom_point(mapping = aes(x = PREMIUM, y = PASSENGERS))+
+  facet_wrap(~BRANCH) +
+  labs(title = "Trend in each Branch")
+```
+
+
+Could it be that the duration between Departure and Return date is the possible cause of the trend observed? In an attempt to investigate this, I created the new column that would hold the duration in days.
+
+## Time difference.
+```{r, duration, echo=FALSE}
+Travel_separate <- Travel_separate %>% mutate(Duration = difftime(RETURN.DATE, DEPARTURE, units = "days"))
+head(Travel_separate,5)
+```
+Now that the column is created and populated, its possible to explore and see if it might bring answers or raise more questions, or even give new insights.
+
+## Premium  against Duration.
+```{r, duration_plot, echo = FALSE, warning=FALSE}
+ggplot(data = Travel_separate) +
+  geom_col(mapping = aes(x = Duration, y = PREMIUM, fill = BRANCH))+
+  facet_wrap(~BRANCH) +
+  labs(title = "Premium against Duration.")
+```
+From the above graph, it is clear that premium is not entirely defined by the duration.The hypothesis to be tested here was, does longer duration mean more premium? Actually from the graph its clear that short duration have more premiums. Now, lets take a look at the performance of each branch.
+
+## Branch with the most count.
+```{r, Branch count, echo=FALSE}
+ggplot(data = Travel_separate) +
+  geom_bar(mapping = aes(x = BRANCH))+
+  labs(title = "Branch with the most traffic.")
+```
+From the above graph, the branch with the highest frequency is Lavington. It had the most client engagement. Could one of the reasons be that their customer service  is up to the client standards and supported by the location Next am touching on the premium in each branch.
+
+## Branch relation to premium.
+```{r, plot, echo=FALSE}
+ggplot(data = Travel_separate) +
+  geom_col(mapping = aes(x = BRANCH, y = PREMIUM)) +
+  labs(title = "Total Premium in each Branch.") 
+```
+From the plot Lavington is still taking the lead from the rest. The general idea here is the more the count the more the premium, this might not always be true cause the premium amount differs but from the two graphs about, it supports the suggested idea.
+
+Lets take a look at employees in all branches and how the performed. Who has the higest number of engagements.
+
+## Employee with the highest number of engagement.
+```{r, engagement, echo=FALSE}
+employee <- Travel_separate %>% group_by(CREATED.BY) %>% count() %>% arrange(desc(n))
+head(employee, 10)
+```
+# Lavington.
+Given that Lavington branch was the lead,lets dive into it and get a better view of the employees.
+## Employee Engagement
+```{r, employees, echo=FALSE}
+lav <- Travel_separate %>% select(BRANCH, CREATED.BY, PREMIUM, PASSENGERS) %>% filter(BRANCH == "Lavington")
+
+ggplot(data = lav) +
+  geom_bar(mapping = aes(x = CREATED.BY)) +
+  labs(title = "Employee Engagement count")
+
+```
+Edah had the highest engagement count, way higher than the rest. According to the graph the employee performance can be seen clearly from who is best performing to who is least performing.
+
+Below is a plot that shows the premium per employee. Shows which employee is generation more premiums towards the business and can be used to guage performance.
+## Premium per employee.
+```{r, Premium, echo=FALSE}
+ggplot(data = lav) +
+  geom_col(mapping = aes(x = CREATED.BY, y = PREMIUM, fill = PASSENGERS)) +
+  labs(title = "Premium per employee") +
+  coord_flip()
+```
+
+## Destination Counties.
+Taking a look as the various destination counties visited by the passengers. This can shade some light on which counties passengers prefer the most and how do the premium compare in all of them. This in turn can aid in guiding marketing strategies.  
+
+## Most visited County.
+Below is a graph showing a graph on Passenger visits to different counties and from the observation Mombasa takes the lead.
+
+```{r, CountyCount, echo=FALSE}
+ggplot(data = Travel_separate) +
+  geom_bar(mapping = aes(x = DestinationCounty, fill = BRANCH)) +
+  labs(title = "Passenger visit per county") +
+  coord_flip()
+```
+
+## Premium per county.
+Again, Mombasa has the highest premium generated. This makes sense as it had the most visits. With this information, the business can then know where to focus their attention and how.
+```{r, CountyPremium, echo=FALSE}
+ggplot(data = Travel_separate) +
+  geom_col(mapping = aes(x = DestinationCounty, y = PREMIUM, fill = BRANCH))+
+  labs(title = "Premium per County") +
+  coord_flip()
+```
+
+# Conclusion.
+* The number of Passengers doesn't directly influence the premium charged. However, there is an influence from the duration between Departure and return dates. The Premium was highest for short duration between 2 to 6 days. For a Branch to make more premium, I would recommend to market for shorter days to maximize on the premiums.
+
+* Client engagement and Premium generation per Branch can be used to evaluate the performance of each branch.
+
+* Employees can also be evaluated in by looking at their respective client engagement and the premium generated. This can be particularly important when evaluating employee performance.
+
+* Marketing strategies should be developed to target other counties that have a reasonable amount of traffic so as to capitalize Premiums in those areas.
+
+* Mombasa has the highest recorded traffic of Passengers, the suggestion here would be, if the business decided to expand, Mombasa could be a consideration.
